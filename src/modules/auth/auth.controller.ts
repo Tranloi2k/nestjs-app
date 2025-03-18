@@ -1,7 +1,8 @@
-import { Controller, Post, Body, Res, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Body, Res, UnauthorizedException, Req, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { Response } from 'express';
 import { LoginDto } from './dto/auth.dto';
+import { JwtAuthGuard } from '../guard/jwt-auth.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -21,5 +22,13 @@ export class AuthController {
       secure: true,
     });
     return { message: 'Login successful' };
+  }
+
+  @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  logout(@Req() req: Request, @Res() res: Response) {
+    // Xóa token từ phía client (ví dụ: xóa cookie hoặc token từ localStorage)
+    res.clearCookie('access_token'); // Xóa cookie nếu sử dụng cookie
+    return res.status(200).json({ message: 'Logout successful' });
   }
 }
