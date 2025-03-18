@@ -1,0 +1,50 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+input CreateProductInput {
+  description: String!
+  name: String!
+  price: Int!
+}
+
+input CreateReviewInput {
+  comment: String!
+  productId: Int!
+  rating: Int!
+}
+
+type Mutation {
+  createProduct(createProductInput: CreateProductInput!): Product!
+  createReview(createReviewInput: CreateReviewInput!): Review!
+  deleteProduct(id: Float!): Boolean!
+  deleteReview(id: Int!): Boolean!
+  updateReview(updateReviewInput: UpdateReviewInput!): Review!
+}
+
+type Product {
+  description: String!
+  id: Float!
+  name: String!
+  price: Int!
+  reviews: [Review!]!
+}
+
+type Query {
+  product(id: Float!): Product!
+  products: [Product!]!
+  reviews(id: Int!): Review!
+}
+
+type Review {
+  comment: String!
+  id: Int!
+  product: Product!
+  rating: Int!
+}
+
+input UpdateReviewInput {
+  comment: String
+  id: Int!
+  rating: Int
+}
