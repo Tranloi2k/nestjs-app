@@ -13,8 +13,10 @@ async function bootstrap() {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
   const allowedOrigins = configService.get<string>('ALLOWED_ORIGINS')?.split(',');
 
+  console.log(allowedOrigins);
+
   app.enableCors({
-    origin: [allowedOrigins], // Chỉ cho phép domain này
+    origin: allowedOrigins, // Chỉ cho phép domain này
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE', // Các phương thức HTTP được phép
     allowedHeaders: 'Content-Type, Accept, Authorization', // Các header được phép
     credentials: true, // Cho phép gửi cookie hoặc thông tin xác thực
