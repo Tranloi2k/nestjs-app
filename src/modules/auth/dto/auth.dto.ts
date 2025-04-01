@@ -18,6 +18,13 @@ export class LoginDto {
   password: string;
 }
 
+export class GetNewTokenDto {
+  @ApiProperty({ description: '', example: 'a' })
+  @IsString()
+  @IsNotEmpty()
+  refreshToken: string;
+}
+
 export class LoginResponseDto {
   @Expose()
   id: number;

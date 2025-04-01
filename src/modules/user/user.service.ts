@@ -5,12 +5,22 @@ import { Repository } from 'typeorm';
 import { User } from './user.entity';
 import * as bcrypt from 'bcrypt';
 
+abstract class BaseUserService {
+  constructor() {}
+  abstract createUser(username: string, email: string, password: string): Promise<User>;
+  abstract findUserByEmail(email: string): Promise<User | null>;
+  abstract findUserById(id: number): Promise<User | null>;
+  abstract updateUser(id: number, updates: Partial<User>): Promise<User | null>;
+  abstract deleteUser(id: number): Promise<void>;
+}
 @Injectable()
-export class UserService {
+export class UserService extends BaseUserService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
-  ) {}
+  ) {
+    super();
+  }
 
   private async hashPassword(password: string): Promise<string> {
     const saltRounds = 10; // Số vòng lặp để tạo salt

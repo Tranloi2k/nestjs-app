@@ -19,4 +19,7 @@ export class User {
   @Field()
   @Column()
   password: string;
+
+  @Column()
+  refreshToken: string;
 }

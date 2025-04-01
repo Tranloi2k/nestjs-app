@@ -10,6 +10,7 @@ import { ReviewModule } from './modules/reviews/reviews.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/user/user.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { SignalingGateway } from './modules/videoCall/signaling.gateway';
 
 @Module({
   imports: [
@@ -39,6 +40,6 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
     UserModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, SignalingGateway],
 })
 export class AppModule {}
