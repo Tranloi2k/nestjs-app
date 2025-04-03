@@ -49,4 +49,10 @@ export class AuthController {
     res.clearCookie('access_token'); // Xóa cookie nếu sử dụng cookie
     return res.status(200).json({ message: 'Logout successful' });
   }
+
+  @Post('/google')
+  async googleAuthCallback(@Body('token') token: string) {
+    const code = await this.authService.googleLogin(token);
+    return { ...code };
+  }
 }

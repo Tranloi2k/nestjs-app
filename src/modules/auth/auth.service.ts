@@ -7,6 +7,7 @@ import * as bcrypt from 'bcrypt';
 import { LoginResponseDto } from './dto/auth.dto';
 import { UserService } from '../user/user.service';
 import removeKeyObject from '../helpers';
+import { OAuth2Client, TokenPayload } from 'google-auth-library';
 
 @Injectable()
 export class AuthService {
@@ -67,5 +68,56 @@ export class AuthService {
     }
     const data = await this.login(user.name, user.id);
     return data;
+  }
+
+  // async googleLogin(code: string) {
+  //   // Đổi Authorization Code → Access Token
+  //   const { data } = await axios.post('https://oauth2.googleapis.com/token', {
+  //     code,
+  //     client_id: '375207417006-u77a0k3mnbi6coog727rd590ipo524lc.apps.googleusercontent.com',
+  //     client_secret: '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',
+  //     redirect_uri: 'http://localhost:8080/',
+  //     grant_type: 'authorization_code',
+  //   });
+
+  //   console.log(data);
+
+  //   Lấy thông tin user từ Google
+  //   const userInfo = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
+  //     headers: { Authorization: `Bearer ${data.access_token}` },
+  //   });
+
+  //   // Tạo JWT token
+  //   const payload = { email: userInfo.data.email, sub: userInfo.data.sub };
+  //   return this.jwtService.sign(payload);
+  //   return '';
+  // }
+
+  private googleClient = new OAuth2Client(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+  );
+
+  async googleLogin(googleToken: string) {
+    // Verify token với Google
+    const ticket = await this.googleClient.verifyIdToken({
+      idToken: googleToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload() as TokenPayload;
+    if (!payload || !payload?.email || !payload?.name) {
+      throw new UnauthorizedException('Invalid google token');
+    }
+
+    let user = await this.userService.findUserByEmail(payload.email);
+
+    if (!user) {
+      user = await this.userService.createUser(payload.name, payload.email, '');
+    }
+
+    const token = await this.login(user.username, user.id);
+    // Tạo JWT token
+    return { ...token };
   }
 }
