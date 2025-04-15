@@ -4,14 +4,14 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Expose } from 'class-transformer';
 
 export class LoginDto {
-  @ApiProperty({ description: '', example: 'a' })
+  @ApiProperty({ description: '', example: 'loi@gmail.com' })
   @IsString()
   @IsNotEmpty()
   email: string;
 
   @ApiProperty({
     description: '',
-    example: '123',
+    example: 'tranloi1',
   })
   @IsString()
   @IsNotEmpty()
@@ -19,7 +19,7 @@ export class LoginDto {
 }
 
 export class GetNewTokenDto {
-  @ApiProperty({ description: '', example: 'a' })
+  @ApiProperty({ description: '', example: 'loi@gmail.com' })
   @IsString()
   @IsNotEmpty()
   refreshToken: string;

@@ -18,7 +18,18 @@ export class ProductsService {
   }
 
   async findAll(): Promise<Product[]> {
-    return this.productRepository.find({ relations: ['reviews'] });
+    const products = await this.productRepository.find({ relations: ['reviews'] });
+    return products.map((product) => {
+      const ratings = product.reviews.map((review) => review.rating);
+      const averageRating =
+        ratings.length > 0 ? ratings.reduce((a, b) => a + b, 0) / ratings.length : 0;
+
+      return {
+        ...product,
+        rate: averageRating,
+        reviewCount: product.reviews.length,
+      };
+    });
   }
 
   async findOne(id: number): Promise<Product> {

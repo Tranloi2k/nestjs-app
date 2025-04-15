@@ -13,9 +13,17 @@ export class Review {
   @Column()
   comment: string;
 
+  @Field()
+  @Column()
+  name: string;
+
   @Field(() => Int)
   @Column()
   rating: number;
+
+  @Field()
+  @Column()
+  createdAt: string;
 
   @Field(() => Product) // Đánh dấu quan hệ với Product
   @ManyToOne(() => Product, (product) => product.reviews) // Quan hệ nhiều-1 với Product

@@ -23,11 +23,19 @@ type Mutation {
 }
 
 type Product {
+  colors: String!
   description: String!
+  detailInformation: String
+  discount: Int!
   id: Float!
+  image: String!
+  images: String!
   name: String!
   price: Int!
+  rate: Float!
+  reviewCount: Int!
   reviews: [Review!]!
+  storageOptions: String!
 }
 
 type Query {
@@ -38,7 +46,9 @@ type Query {
 
 type Review {
   comment: String!
+  createdAt: String!
   id: Int!
+  name: String!
   product: Product!
   rating: Int!
 }

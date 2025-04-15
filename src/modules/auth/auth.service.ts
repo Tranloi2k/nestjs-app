@@ -70,29 +70,6 @@ export class AuthService {
     return data;
   }
 
-  // async googleLogin(code: string) {
-  //   // Đổi Authorization Code → Access Token
-  //   const { data } = await axios.post('https://oauth2.googleapis.com/token', {
-  //     code,
-  //     client_id: '375207417006-u77a0k3mnbi6coog727rd590ipo524lc.apps.googleusercontent.com',
-  //     client_secret: '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',
-  //     redirect_uri: 'http://localhost:8080/',
-  //     grant_type: 'authorization_code',
-  //   });
-
-  //   console.log(data);
-
-  //   Lấy thông tin user từ Google
-  //   const userInfo = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
-  //     headers: { Authorization: `Bearer ${data.access_token}` },
-  //   });
-
-  //   // Tạo JWT token
-  //   const payload = { email: userInfo.data.email, sub: userInfo.data.sub };
-  //   return this.jwtService.sign(payload);
-  //   return '';
-  // }
-
   private googleClient = new OAuth2Client(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
