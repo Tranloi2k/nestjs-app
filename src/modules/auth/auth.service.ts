@@ -32,7 +32,7 @@ export class AuthService {
       sub: userId,
       iat: Math.floor(Date.now() / 1000), // Thêm thời gian hiện tại
       nonce: Math.random().toString(36).substring(2), // Thêm giá trị ngẫu nhiên
-      expiresIn: '7d',
+      expiresIn: '1m',
     };
 
     const accessToken = await this.jwtService.signAsync(payload);
@@ -45,6 +45,7 @@ export class AuthService {
     const refreshToken = await this.jwtService.signAsync(refreshPayload);
     await this.userService.updateUser(userId, { refreshToken });
     return {
+      userId,
       accessToken,
       refreshToken,
     };

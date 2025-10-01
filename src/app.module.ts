@@ -9,6 +9,7 @@ import { join } from 'path';
 import { ReviewModule } from './modules/reviews/reviews.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/user/user.module';
+import { CartModule } from './modules/cart/cart.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { SignalingGateway } from './modules/videoCall/signaling.gateway';
 
@@ -38,6 +39,7 @@ import { SignalingGateway } from './modules/videoCall/signaling.gateway';
     ReviewModule,
     AuthModule,
     UserModule,
+    CartModule,
   ],
   controllers: [AppController],
   providers: [AppService, SignalingGateway],

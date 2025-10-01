@@ -14,8 +14,9 @@ export class ProductResolver {
   ) {}
 
   @Query(() => [Product], { name: 'products' })
-  findAll() {
-    return this.productService.findAll();
+  async findAll() {
+    const result = await this.productService.findAll();
+    return result.products;
   }
 
   @Query(() => Product, { name: 'product' })

@@ -1,9 +1,11 @@
-import { Controller, Get, Post, Body, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, UseGuards, Query } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
+import { QueryProductDto } from './dto/query-product.dto';
+import { PaginatedProductResponseDto } from './dto/paginated-product-response.dto';
 // import { UpdateProductDto } from './dto/update-product.dto';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
-// import { JwtAuthGuard } from '../guard/jwt-auth.guard';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../guard/jwt-auth.guard';
 import { Product } from './entities/product.entity';
 
 @ApiTags('products') // Nhóm các API liên quan đến sản phẩm
@@ -22,17 +24,19 @@ export class ProductsController {
     return this.productsService.create(createProductDto);
   }
 
-  // @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard)
   @Get()
-  @ApiOperation({ summary: 'Get all products' })
+  @ApiOperation({ summary: 'Get all products with search and pagination' })
   @ApiResponse({
     status: 200,
-    description: 'Return all products.',
-    type: [Product],
+    description: 'Return paginated products with search functionality.',
+    type: PaginatedProductResponseDto,
   })
-  async findAll(): Promise<{ products: Product[] }> {
-    const products = await this.productsService.findAll(); // Đợi kết quả của Promise
-    return { products }; // Trả về object với thuộc tính products
+  @ApiQuery({ name: 'search', required: false, description: 'Search by product name' })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number', example: 1 })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items per page', example: 10 })
+  async findAll(@Query() queryDto: QueryProductDto): Promise<PaginatedProductResponseDto> {
+    return this.productsService.findAll(queryDto);
   }
 
   @Get(':id')

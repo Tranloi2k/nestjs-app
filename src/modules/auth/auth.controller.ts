@@ -9,19 +9,20 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('login')
-  // async login(@Body() loginDto: LoginDto, @Res({ passthrough: true }) res: Response) {
-  async login(@Body() loginDto: LoginDto) {
+  async login(@Body() loginDto: LoginDto, @Res({ passthrough: true }) res: Response) {
+    // async login(@Body() loginDto: LoginDto) {
+    console.log('Login DTO:----------------');
     const user = await this.authService.validateUser(loginDto.email, loginDto.password);
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
     const token = await this.authService.login(user.username, user.id);
-    // res.cookie('access_token', token.access_token, {
-    //   httpOnly: true,
-    //   // secure: process.env.NODE_ENV === 'production',
-    //   sameSite: 'none',
-    //   secure: true,
-    // });
+    res.cookie('access_token', token.accessToken, {
+      httpOnly: true,
+      // secure: process.env.NODE_ENV === 'production',
+      sameSite: 'none',
+      secure: true,
+    });
     return { message: 'Login successful', ...token };
   }
 
