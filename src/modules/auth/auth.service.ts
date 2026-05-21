@@ -141,15 +141,15 @@ export class AuthService {
     }
   }
 
-  // async logout(userId: number) {
-  //   await this.userService.updateUser(userId, {
-  //     refreshToken: null,
-  //   });
+  async logout(userId: number) {
+    await this.userService.updateUser(userId, {
+      refreshToken: '',
+    });
 
-  //   return {
-  //     message: 'Logout successful',
-  //   };
-  // }
+    return {
+      message: 'Logout successful',
+    };
+  }
 
   async googleLogin(googleToken: string) {
     const ticket = await this.googleClient.verifyIdToken({
