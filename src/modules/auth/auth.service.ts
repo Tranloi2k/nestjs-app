@@ -1,49 +1,104 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { LoginResponseDto } from './dto/auth.dto';
+import { OAuth2Client, TokenPayload } from 'google-auth-library';
+
 import { UserService } from '../user/user.service';
 import removeKeyObject from '../helpers';
-import { OAuth2Client, TokenPayload } from 'google-auth-library';
+import { LoginResponseDto } from './dto/auth.dto';
 
 @Injectable()
 export class AuthService {
+  private readonly googleClient: OAuth2Client;
+
   constructor(
     private readonly jwtService: JwtService,
-    private userService: UserService,
-  ) {}
+    private readonly userService: UserService,
+  ) {
+    this.googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+  }
 
-  async validateUser(email: string, password: string): Promise<LoginResponseDto | null> {
+  /*
+   |--------------------------------------------------------------------------
+   | VALIDATE USER
+   |--------------------------------------------------------------------------
+   */
+
+  async validateUser(
+    email: string,
+    password: string,
+  ): Promise<Omit<LoginResponseDto, 'password'> | null> {
     const user = await this.userService.findUserByEmail(email);
     if (user && (await bcrypt.compare(password, user.password))) {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { password, ...result } = user;
-      return result;
+      return removeKeyObject(user, 'password');
     }
     return null;
   }
 
-  async login(userName: string, userId: number) {
-    const payload = {
-      username: userName,
-      sub: userId,
-      iat: Math.floor(Date.now() / 1000), // Thêm thời gian hiện tại
-      nonce: Math.random().toString(36).substring(2), // Thêm giá trị ngẫu nhiên
-      expiresIn: '1m',
-    };
+  async validateUserById(id: number) {
+    const user = await this.userService.findUserById(id);
 
-    const accessToken = await this.jwtService.signAsync(payload);
-    const refreshPayload = {
-      username: userName,
-      sub: userId,
-      iat: Math.floor(Date.now() / 1000), // Thêm thời gian hiện tại
-      nonce: Math.random().toString(36).substring(2), // Thêm giá trị ngẫu nhiên
-    };
-    const refreshToken = await this.jwtService.signAsync(refreshPayload);
-    await this.userService.updateUser(userId, { refreshToken });
+    if (!user) {
+      return null;
+    }
+
+    return removeKeyObject(user, 'password');
+  }
+
+  /*
+   |--------------------------------------------------------------------------
+   | TOKEN GENERATORS
+   |--------------------------------------------------------------------------
+   */
+
+  private async generateAccessToken(username: string, userId: number) {
+    return this.jwtService.signAsync(
+      {
+        username,
+        sub: userId,
+      },
+      {
+        secret: process.env.JWT_ACCESS_SECRET,
+        expiresIn: '15m',
+      },
+    );
+  }
+
+  private async generateRefreshToken(username: string, userId: number) {
+    return this.jwtService.signAsync(
+      {
+        username,
+        sub: userId,
+      },
+      {
+        secret: process.env.JWT_REFRESH_SECRET,
+        expiresIn: '7d',
+      },
+    );
+  }
+
+  /*
+   |--------------------------------------------------------------------------
+   | LOGIN
+   |--------------------------------------------------------------------------
+   */
+
+  async login(username: string, userId: number) {
+    const accessToken = await this.generateAccessToken(username, userId);
+
+    const refreshToken = await this.generateRefreshToken(username, userId);
+
+    // Hash refresh token trước khi lưu DB
+    const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
+
+    await this.userService.updateUser(userId, {
+      refreshToken: hashedRefreshToken,
+    });
+
     return {
       userId,
       accessToken,
@@ -51,42 +106,61 @@ export class AuthService {
     };
   }
 
-  async validateUserById(id: number): Promise<any> {
-    const user = await this.userService.findUserById(id);
-    if (user) {
-      return removeKeyObject(user, 'password');
+  /*
+   |--------------------------------------------------------------------------
+   | REFRESH TOKEN
+   |--------------------------------------------------------------------------
+   */
+
+  async refreshToken(refreshToken: string) {
+    try {
+      const payload = this.jwtService.verify<{
+        sub: number;
+        username: string;
+      }>(refreshToken, {
+        secret: process.env.JWT_REFRESH_SECRET,
+      });
+
+      const user = await this.userService.findUserById(payload.sub);
+
+      if (!user || !user.refreshToken) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
+
+      const isMatch = await bcrypt.compare(refreshToken, user.refreshToken);
+
+      if (!isMatch) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
+
+      // Refresh token rotation
+      return this.login(user.username, user.id);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    } catch (error) {
+      throw new UnauthorizedException('Refresh token expired or invalid');
     }
-    return null;
   }
 
-  async refreshToken(token: string) {
-    const payload: { sub: number } = this.jwtService.verify(token);
-    const user: { id: number; name: string; refreshToken: string } = await this.validateUserById(
-      payload.sub,
-    );
-    if (!user || token !== user.refreshToken) {
-      throw new UnauthorizedException('Invalid token');
-    }
-    const data = await this.login(user.name, user.id);
-    return data;
-  }
+  // async logout(userId: number) {
+  //   await this.userService.updateUser(userId, {
+  //     refreshToken: null,
+  //   });
 
-  private googleClient = new OAuth2Client(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-  );
+  //   return {
+  //     message: 'Logout successful',
+  //   };
+  // }
 
   async googleLogin(googleToken: string) {
-    // Verify token với Google
     const ticket = await this.googleClient.verifyIdToken({
       idToken: googleToken,
       audience: process.env.GOOGLE_CLIENT_ID,
     });
 
-    console.log(ticket);
     const payload = ticket.getPayload() as TokenPayload;
-    if (!payload || !payload?.email || !payload?.name) {
-      throw new UnauthorizedException('Invalid google token');
+
+    if (!payload || !payload.email || !payload.name) {
+      throw new UnauthorizedException('Invalid Google token');
     }
 
     let user = await this.userService.findUserByEmail(payload.email);
@@ -95,8 +169,6 @@ export class AuthService {
       user = await this.userService.createUser(payload.name, payload.email, '');
     }
 
-    const token = await this.login(user.username, user.id);
-    // Tạo JWT token
-    return { ...token };
+    return this.login(user.username, user.id);
   }
 }

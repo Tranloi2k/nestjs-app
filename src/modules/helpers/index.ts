@@ -1,12 +1,10 @@
-const removeKeyObject = (obj: { [key: string]: any }, keyToRemove: string) => {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-  return Object.keys(obj).reduce((acc, key) => {
-    if (key !== keyToRemove) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      acc[key] = obj[key];
-    }
-    return acc;
-  }, {});
+const removeKeyObject = <T extends Record<string, any>, K extends keyof T>(
+  obj: T,
+  keyToRemove: K,
+): Omit<T, K> => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { [keyToRemove]: _, ...rest } = obj;
+  return rest;
 };
 
 export default removeKeyObject;
