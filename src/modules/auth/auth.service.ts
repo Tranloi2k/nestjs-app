@@ -83,6 +83,7 @@ export class AuthService {
       audience: process.env.GOOGLE_CLIENT_ID,
     });
 
+    console.log(ticket);
     const payload = ticket.getPayload() as TokenPayload;
     if (!payload || !payload?.email || !payload?.name) {
       throw new UnauthorizedException('Invalid google token');

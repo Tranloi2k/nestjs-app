@@ -52,8 +52,8 @@ export class AuthController {
   }
 
   @Post('/google')
-  async googleAuthCallback(@Body('token') token: string) {
-    const code = await this.authService.googleLogin(token);
+  async googleAuthCallback(@Body('idToken') idToken: string) {
+    const code = await this.authService.googleLogin(idToken);
     return { ...code };
   }
 }
