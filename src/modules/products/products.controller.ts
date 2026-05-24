@@ -4,17 +4,19 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { QueryProductDto } from './dto/query-product.dto';
 import { PaginatedProductResponseDto } from './dto/paginated-product-response.dto';
 // import { UpdateProductDto } from './dto/update-product.dto';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../guard/jwt-auth.guard';
 import { Product } from './entities/product.entity';
 
-@ApiTags('products') // Nhóm các API liên quan đến sản phẩm
+@ApiTags('products')
 @Controller('products')
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a new product' })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create a new product (authenticated)' })
   @ApiResponse({
     status: 201,
     description: 'The product has been successfully created.',
@@ -24,9 +26,9 @@ export class ProductsController {
     return this.productsService.create(createProductDto);
   }
 
-  @UseGuards(JwtAuthGuard)
+  /** Public catalog — matches Nova Shop SEO / guest browsing on `/products`. */
   @Get()
-  @ApiOperation({ summary: 'Get all products with search and pagination' })
+  @ApiOperation({ summary: 'Get all products with search and pagination (public)' })
   @ApiResponse({
     status: 200,
     description: 'Return paginated products with search functionality.',
@@ -39,8 +41,9 @@ export class ProductsController {
     return this.productsService.findAll(queryDto);
   }
 
+  /** Public product detail — matches Nova Shop `/products/[slug]`. */
   @Get(':id')
-  @ApiOperation({ summary: 'Get a product by ID' })
+  @ApiOperation({ summary: 'Get a product by ID (public)' })
   @ApiResponse({
     status: 200,
     description: 'Return the product with the specified ID.',
@@ -64,7 +67,9 @@ export class ProductsController {
   //   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete a product by ID' })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete a product by ID (authenticated)' })
   @ApiResponse({
     status: 200,
     description: 'The product has been successfully deleted.',
