@@ -54,3 +54,12 @@ pids
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Cursor IDE
+.cursor/
+.cursor/plans/
+.cursor/projects/
+*.cursor-plan.md
+
+# CodeGraph local index (regenerate with `codegraph init -i`)
+.codegraph/
