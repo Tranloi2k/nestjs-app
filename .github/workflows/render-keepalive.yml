@@ -1,10 +1,18 @@
 name: Render Keep Alive
 
 on:
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/render-keepalive.yml'
   schedule:
-    # Render free tier sleeps after ~15 min idle — ping every 10 minutes
+    # Render free tier sleeps after ~15 min idle - ping every 10 minutes (UTC)
     - cron: '*/10 * * * *'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   ping:
@@ -22,7 +30,7 @@ jobs:
               --max-time 120 \
               "$URL" || echo "000")
 
-            echo "Attempt $attempt — HTTP $status"
+            echo "Attempt $attempt - HTTP $status"
             cat /tmp/render-response.txt || true
             echo ""
 
