@@ -19,7 +19,11 @@ async function bootstrap() {
   app.use(cookieParser());
   const configService = app.get(ConfigService);
 
-  const allowedOrigins = configService.get<string>('ALLOWED_ORIGINS')?.split(',');
+  const allowedOriginsStr = configService.get<string>('ALLOWED_ORIGINS') || '';
+  const allowedOrigins = allowedOriginsStr
+    .split(',')
+    .map(origin => origin.trim().replace(/\/+$/, ''))
+    .filter(origin => origin.length > 0);
 
   app.enableCors({
     origin: allowedOrigins, // Chỉ cho phép domain này
