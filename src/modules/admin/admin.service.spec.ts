@@ -4,6 +4,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Product } from '../products/entities/product.entity';
 import { Order } from '../order/entities/order.entity';
 import { User } from '../user/user.entity';
+import { MailService } from '../notifications/mail.service';
 import { DataSource } from 'typeorm';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 
@@ -39,6 +40,7 @@ describe('AdminService', () => {
     mockManager = {
       save: jest.fn(),
       increment: jest.fn(),
+      create: jest.fn().mockImplementation((_entity, data) => data),
     };
 
     const mockDataSource = {
@@ -75,6 +77,13 @@ describe('AdminService', () => {
         {
           provide: getRepositoryToken(User),
           useValue: mockUserRepository,
+        },
+        {
+          provide: MailService,
+          useValue: {
+            sendOrderConfirmation: jest.fn().mockResolvedValue(undefined),
+            sendOrderShipped: jest.fn().mockResolvedValue(undefined),
+          },
         },
         {
           provide: DataSource,

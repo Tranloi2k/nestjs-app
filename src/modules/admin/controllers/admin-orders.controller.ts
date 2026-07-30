@@ -11,6 +11,8 @@ import { AdminService } from '../admin.service';
 import { JwtAuthGuard } from '../../guard/jwt-auth.guard';
 import { RolesGuard } from '../../guard/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
+import { User } from '../../user/user.entity';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 
 @ApiTags('admin-orders')
@@ -62,11 +64,20 @@ export class AdminOrdersController {
   async updateOrderStatus(
     @Param('id') id: string,
     @Body('status') status: string,
+    @CurrentUser() actor: User,
+    @Body('trackingNumber') trackingNumber?: string,
+    @Body('carrier') carrier?: string,
+    @Body('note') note?: string,
   ) {
     let numericId = parseInt(id, 10);
     if (isNaN(numericId) && id.toUpperCase().startsWith('ORD-')) {
       numericId = parseInt(id.substring(4), 10);
     }
-    return this.adminService.updateOrderStatus(numericId, status);
+    return this.adminService.updateOrderStatus(numericId, status, {
+      trackingNumber,
+      carrier,
+      note,
+      changedBy: actor?.id,
+    });
   }
 }

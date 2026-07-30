@@ -100,13 +100,16 @@ npm run build && npm run start:prod   # Production
 
 Default port is `5000` (override with `PORT`).
 
-### 4. Seed admin (dev)
+### 4. Create an admin user
 
-```bash
-curl -X POST http://localhost:5000/auth/seed-admin
+Register a normal account through the storefront/API, then promote it to
+admin directly in the database:
+
+```sql
+UPDATE "user" SET role = 'admin' WHERE email = 'you@example.com';
 ```
 
-Use the returned credentials to sign in to the admin panel.
+Sign in with that account to access the admin panel.
 
 ---
 
@@ -121,7 +124,6 @@ POST /login              # Email/password (rate-limited)
 POST /token              # Refresh access token
 POST /logout             # JWT required
 POST /google             # Google ID token
-POST /auth/seed-admin    # Dev only — create admin user
 ```
 
 ### Catalog (public)

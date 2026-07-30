@@ -21,6 +21,7 @@ export class OrderWebhookController {
       orderType: dto.orderType,
       productId: dto.productId,
       quantity: dto.quantity,
+      addressId: dto.addressId,
     };
 
     return this.orderService.createOrder(dto.userId, createOrderDto);

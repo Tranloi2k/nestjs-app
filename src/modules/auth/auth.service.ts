@@ -13,7 +13,6 @@ import {
   getJwtRefreshSecret,
   JwtTokenType,
 } from '../../config/jwt.config';
-import { UserRole } from '../user/user-role.enum';
 
 @Injectable()
 export class AuthService {
@@ -185,14 +184,5 @@ export class AuthService {
     }
 
     return this.login(user.username, user.id);
-  }
-
-  async seedAdmin() {
-    const adminEmail = 'admin@novashop.com';
-    let user = await this.userService.findUserByEmail(adminEmail);
-    if (!user) {
-      user = await this.userService.createUserWithRole('admin', adminEmail, 'admin123', UserRole.Admin);
-    }
-    return instanceToPlain(user) as Omit<LoginResponseDto, 'password'>;
   }
 }

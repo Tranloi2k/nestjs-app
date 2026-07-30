@@ -26,4 +26,13 @@ export class CreateOrderDto {
   @IsOptional()
   @IsNumber()
   quantity?: number;
+
+  @ApiProperty({
+    description: 'ID of the saved shipping address to snapshot onto the order',
+    example: 1,
+    required: false,
+  })
+  @IsOptional()
+  @IsNumber()
+  addressId?: number;
 }

@@ -28,4 +28,9 @@ export class ConfirmOrderWebhookDto {
   @IsNumber()
   @Min(1)
   quantity?: number;
+
+  @ApiProperty({ description: 'Saved shipping address ID to snapshot', required: false })
+  @IsOptional()
+  @IsNumber()
+  addressId?: number;
 }

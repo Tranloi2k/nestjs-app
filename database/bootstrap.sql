@@ -15,8 +15,10 @@ BEGIN;
 -- Drop in FK-safe order
 DROP TABLE IF EXISTS wishlist_items CASCADE;
 DROP TABLE IF EXISTS storefront_posters CASCADE;
+DROP TABLE IF EXISTS order_status_history CASCADE;
 DROP TABLE IF EXISTS order_items CASCADE;
 DROP TABLE IF EXISTS orders CASCADE;
+DROP TABLE IF EXISTS addresses CASCADE;
 DROP TABLE IF EXISTS cart_items CASCADE;
 DROP TABLE IF EXISTS carts CASCADE;
 DROP TABLE IF EXISTS reviews CASCADE;
@@ -121,14 +123,51 @@ CREATE UNIQUE INDEX cart_items_cart_product_variant_unique
   ON cart_items ("cartId", "productId", color, storage);
 
 -- -----------------------------------------------------------------------------
+-- addresses (customer shipping / billing address book)
+-- -----------------------------------------------------------------------------
+CREATE TABLE addresses (
+  id           SERIAL PRIMARY KEY,
+  "userId"     INTEGER NOT NULL,
+  "fullName"   VARCHAR NOT NULL,
+  phone        VARCHAR NOT NULL,
+  line1        VARCHAR NOT NULL,
+  line2        VARCHAR,
+  city         VARCHAR NOT NULL,
+  state        VARCHAR,
+  "postalCode" VARCHAR NOT NULL,
+  country      VARCHAR NOT NULL,
+  "isDefault"  BOOLEAN NOT NULL DEFAULT FALSE,
+  "createdAt"  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt"  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_addresses_users
+    FOREIGN KEY ("userId") REFERENCES users(id)
+    ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE INDEX idx_addresses_user_id ON addresses ("userId");
+
+-- -----------------------------------------------------------------------------
 -- orders
 -- -----------------------------------------------------------------------------
 CREATE TABLE orders (
   id               SERIAL PRIMARY KEY,
   "userId"         INTEGER NOT NULL,
   "stripeSessionId" VARCHAR NOT NULL UNIQUE,
+  subtotal         NUMERIC(10,2) NOT NULL DEFAULT 0,
+  "shippingFee"    NUMERIC(10,2) NOT NULL DEFAULT 0,
+  "taxAmount"      NUMERIC(10,2) NOT NULL DEFAULT 0,
   total            NUMERIC NOT NULL,
   status           VARCHAR DEFAULT 'processing',
+  "trackingNumber" VARCHAR,
+  carrier          VARCHAR,
+  "shipName"       VARCHAR,
+  "shipPhone"      VARCHAR,
+  "shipLine1"      VARCHAR,
+  "shipLine2"      VARCHAR,
+  "shipCity"       VARCHAR,
+  "shipState"      VARCHAR,
+  "shipPostalCode" VARCHAR,
+  "shipCountry"    VARCHAR,
   "createdAt"      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
   "updatedAt"      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_orders_users
@@ -137,6 +176,24 @@ CREATE TABLE orders (
 );
 
 CREATE INDEX idx_orders_user_id ON orders ("userId");
+
+-- -----------------------------------------------------------------------------
+-- order_status_history (audit trail of order status transitions)
+-- -----------------------------------------------------------------------------
+CREATE TABLE order_status_history (
+  id           SERIAL PRIMARY KEY,
+  "orderId"    INTEGER NOT NULL,
+  "fromStatus" VARCHAR,
+  "toStatus"   VARCHAR NOT NULL,
+  note         VARCHAR,
+  "changedBy"  INTEGER,
+  "createdAt"  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_order_status_history_orders
+    FOREIGN KEY ("orderId") REFERENCES orders(id)
+    ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE INDEX idx_order_status_history_order_id ON order_status_history ("orderId");
 
 -- -----------------------------------------------------------------------------
 -- order_items
@@ -211,8 +268,10 @@ ALTER TABLE "Products" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
 ALTER TABLE carts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cart_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE addresses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE order_status_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE wishlist_items ENABLE ROW LEVEL SECURITY;
 -- storefront_posters: RLS off in production — enable + add policies if using Supabase client directly:
 -- ALTER TABLE storefront_posters ENABLE ROW LEVEL SECURITY;

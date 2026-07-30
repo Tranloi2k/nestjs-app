@@ -8,13 +8,14 @@ import { AdminAnalyticsController } from './controllers/admin-analytics.controll
 import { Product } from '../products/entities/product.entity';
 import { Order } from '../order/entities/order.entity';
 import { OrderItem } from '../order/entities/order-item.entity';
+import { OrderStatusHistory } from '../order/entities/order-status-history.entity';
 import { User } from '../user/user.entity';
 import { AuthModule } from '../auth/auth.module';
 import { UserModule } from '../user/user.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Product, Order, OrderItem, User]),
+    TypeOrmModule.forFeature([Product, Order, OrderItem, OrderStatusHistory, User]),
     AuthModule,
     UserModule,
   ],

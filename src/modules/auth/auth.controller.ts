@@ -60,10 +60,4 @@ export class AuthController {
     const code = await this.authService.googleLogin(idToken);
     return { ...code };
   }
-
-  @Post('/auth/seed-admin')
-  async seedAdmin() {
-    const user = await this.authService.seedAdmin();
-    return { message: 'Seed admin user successful', user };
-  }
 }

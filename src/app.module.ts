@@ -14,6 +14,8 @@ import { WishlistModule } from './modules/wishlist/wishlist.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { OrderModule } from './modules/order/order.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { AddressModule } from './modules/address/address.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { StorefrontPostersModule } from './modules/storefront-posters/storefront-posters.module';
 import { ThrottlerModule } from '@nestjs/throttler';
 
@@ -60,12 +62,14 @@ import { ThrottlerModule } from '@nestjs/throttler';
       isGlobal: true, // Làm cho ConfigModule có sẵn ở mọi nơi trong ứng dụng
       envFilePath: '.env', // Đường dẫn đến file .env
     }),
+    NotificationsModule,
     ProductsModule,
     ReviewModule,
     AuthModule,
     UserModule,
     CartModule,
     WishlistModule,
+    AddressModule,
     OrderModule,
     AdminModule,
     StorefrontPostersModule,

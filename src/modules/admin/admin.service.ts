@@ -1,14 +1,30 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Product } from '../products/entities/product.entity';
 import { Order } from '../order/entities/order.entity';
 import { OrderItem } from '../order/entities/order-item.entity';
+import { OrderStatusHistory } from '../order/entities/order-status-history.entity';
 import { User } from '../user/user.entity';
 import { UserRole } from '../user/user-role.enum';
+import {
+  OrderStatus,
+  ORDER_STATUS_TRANSITIONS,
+  isValidOrderStatus,
+} from '../order/order-status.enum';
+import { MailService, OrderEmailPayload } from '../notifications/mail.service';
+
+export interface UpdateOrderStatusOptions {
+  trackingNumber?: string;
+  carrier?: string;
+  note?: string;
+  changedBy?: number;
+}
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     @InjectRepository(Product)
     private readonly productRepository: Repository<Product>,
@@ -16,6 +32,7 @@ export class AdminService {
     private readonly orderRepository: Repository<Order>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly mailService: MailService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -241,7 +258,7 @@ export class AdminService {
   async getOrderById(id: number) {
     const order = await this.orderRepository.findOne({
       where: { id },
-      relations: ['user', 'items'],
+      relations: ['user', 'items', 'statusHistory'],
     });
 
     if (!order) {
@@ -252,8 +269,25 @@ export class AdminService {
       id: `ORD-${order.id}`,
       userId: order.userId,
       stripeSessionId: order.stripeSessionId,
+      subtotal: Number(order.subtotal),
+      shippingFee: Number(order.shippingFee),
+      taxAmount: Number(order.taxAmount),
       total: Number(order.total),
       status: order.status,
+      trackingNumber: order.trackingNumber,
+      carrier: order.carrier,
+      shippingAddress: order.shipLine1
+        ? {
+            fullName: order.shipName,
+            phone: order.shipPhone,
+            line1: order.shipLine1,
+            line2: order.shipLine2,
+            city: order.shipCity,
+            state: order.shipState,
+            postalCode: order.shipPostalCode,
+            country: order.shipCountry,
+          }
+        : null,
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,
       customer: order.user ? {
@@ -269,13 +303,28 @@ export class AdminService {
         price: Number(item.price),
         quantity: item.quantity,
       })),
+      statusHistory: (order.statusHistory || [])
+        .slice()
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+        .map((h) => ({
+          fromStatus: h.fromStatus,
+          toStatus: h.toStatus,
+          note: h.note,
+          changedBy: h.changedBy,
+          createdAt: h.createdAt,
+        })),
     };
   }
 
-  async updateOrderStatus(id: number, status: string) {
+  async updateOrderStatus(id: number, status: string, options: UpdateOrderStatusOptions = {}) {
+    if (!isValidOrderStatus(status)) {
+      throw new BadRequestException(`Invalid order status: "${status}"`);
+    }
+    const nextStatus = status;
+
     const order = await this.orderRepository.findOne({
       where: { id },
-      relations: ['items'],
+      relations: ['items', 'user'],
     });
 
     if (!order) {
@@ -283,33 +332,72 @@ export class AdminService {
     }
 
     const currentStatus = order.status;
-    const validTransitions: Record<string, string[]> = {
-      processing: ['shipped', 'cancelled'],
-      shipped: ['delivered', 'cancelled'],
-      delivered: [],
-      cancelled: [],
-    };
-
-    const allowed = validTransitions[currentStatus] || [];
-    if (!allowed.includes(status)) {
+    const allowed = ORDER_STATUS_TRANSITIONS[currentStatus] ?? [];
+    if (!allowed.includes(nextStatus)) {
       throw new BadRequestException(
-        `Invalid status transition from "${currentStatus}" to "${status}"`,
+        `Invalid status transition from "${currentStatus}" to "${nextStatus}"`,
       );
     }
 
-    return this.dataSource.transaction(async (manager) => {
-      order.status = status;
+    await this.dataSource.transaction(async (manager) => {
+      order.status = nextStatus;
 
-      // Atomic stock restoration on cancellation
-      if (status === 'cancelled') {
+      if (nextStatus === OrderStatus.Shipped) {
+        if (options.trackingNumber) order.trackingNumber = options.trackingNumber;
+        if (options.carrier) order.carrier = options.carrier;
+      }
+
+      // Atomic stock restoration on cancellation.
+      if (nextStatus === OrderStatus.Cancelled) {
         for (const item of order.items) {
-          await manager.increment(Product, { id: item.productId }, 'stock', item.quantity);
+          if (item.productId) {
+            await manager.increment(Product, { id: item.productId }, 'stock', item.quantity);
+          }
         }
       }
 
       await manager.save(Order, order);
-      return this.getOrderById(order.id);
+
+      // Append to the audit trail.
+      await manager.save(
+        manager.create(OrderStatusHistory, {
+          orderId: order.id,
+          fromStatus: currentStatus,
+          toStatus: nextStatus,
+          note: options.note ?? null,
+          changedBy: options.changedBy ?? null,
+        }),
+      );
     });
+
+    // Best-effort shipping notification.
+    if (nextStatus === OrderStatus.Shipped && order.user?.email) {
+      void this.mailService
+        .sendOrderShipped(order.user.email, this.toEmailPayload(order))
+        .catch((err: unknown) => {
+          const message = err instanceof Error ? err.message : String(err);
+          this.logger.error(`Shipped email failed for order ${order.id}: ${message}`);
+        });
+    }
+
+    return this.getOrderById(order.id);
+  }
+
+  private toEmailPayload(order: Order): OrderEmailPayload {
+    return {
+      reference: `ORD-${order.id}`,
+      subtotal: Number(order.subtotal),
+      shippingFee: Number(order.shippingFee),
+      taxAmount: Number(order.taxAmount),
+      total: Number(order.total),
+      trackingNumber: order.trackingNumber,
+      carrier: order.carrier,
+      items: (order.items || []).map((item) => ({
+        name: item.productName,
+        quantity: item.quantity,
+        price: Number(item.price),
+      })),
+    };
   }
 
   /*
@@ -526,8 +614,8 @@ export class AdminService {
 
   async getConversionRate() {
     const total = await this.orderRepository.count();
-    const delivered = await this.orderRepository.count({ where: { status: 'delivered' } });
-    const cancelled = await this.orderRepository.count({ where: { status: 'cancelled' } });
+    const delivered = await this.orderRepository.count({ where: { status: OrderStatus.Delivered } });
+    const cancelled = await this.orderRepository.count({ where: { status: OrderStatus.Cancelled } });
 
     const deliveredRevenue = await this.orderRepository
       .createQueryBuilder('order')

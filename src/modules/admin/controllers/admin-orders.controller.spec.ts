@@ -49,10 +49,23 @@ describe('AdminOrdersController', () => {
   });
 
   describe('updateOrderStatus', () => {
-    it('should call updateOrderStatus with parsed numeric ID and new status', async () => {
+    it('should call updateOrderStatus with parsed numeric ID, status and fulfillment options', async () => {
       service.updateOrderStatus.mockResolvedValue({ id: 'ORD-12', status: 'shipped' });
-      const result = await controller.updateOrderStatus('ORD-12', 'shipped');
-      expect(service.updateOrderStatus).toHaveBeenCalledWith(12, 'shipped');
+      const actor = { id: 7 } as any;
+      const result = await controller.updateOrderStatus(
+        'ORD-12',
+        'shipped',
+        actor,
+        'TRACK123',
+        'GHN',
+        'Handed to courier',
+      );
+      expect(service.updateOrderStatus).toHaveBeenCalledWith(12, 'shipped', {
+        trackingNumber: 'TRACK123',
+        carrier: 'GHN',
+        note: 'Handed to courier',
+        changedBy: 7,
+      });
       expect(result.status).toBe('shipped');
     });
   });
