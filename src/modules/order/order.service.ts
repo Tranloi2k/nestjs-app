@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, EntityManager } from 'typeorm';
 import { Order } from './entities/order.entity';
@@ -16,6 +11,7 @@ import { Address } from '../address/entities/address.entity';
 import { User } from '../user/user.entity';
 import { CartService } from '../cart/cart.service';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { GuestShippingAddressDto } from './dto/guest-shipping-address.dto';
 import { OrderStatus } from './order-status.enum';
 import { computeOrderCharges } from '../../common/pricing/order-pricing';
 import { MailService, OrderEmailPayload } from '../notifications/mail.service';
@@ -50,150 +46,197 @@ export class OrderService {
     return orders.map((order) => this.mapOrderToDto(order));
   }
 
-  async createOrder(userId: number, dto: CreateOrderDto): Promise<Record<string, unknown>> {
-    const { dto: result, isNew, savedOrder } = await this.dataSource.transaction(
-      async (manager) => {
-        // Idempotency check inside transaction to prevent duplicate creation.
-        const existingOrder = await manager.findOne(Order, {
-          where: { stripeSessionId: dto.stripeSessionId },
-          relations: ['items'],
+  async createOrder(userId: number | null, dto: CreateOrderDto): Promise<Record<string, unknown>> {
+    const isGuest = userId == null;
+
+    const {
+      dto: result,
+      isNew,
+      savedOrder,
+      notifyEmail,
+    } = await this.dataSource.transaction(async (manager) => {
+      // Idempotency check inside transaction to prevent duplicate creation.
+      const existingOrder = await manager.findOne(Order, {
+        where: { stripeSessionId: dto.stripeSessionId },
+        relations: ['items'],
+      });
+
+      if (existingOrder) {
+        return {
+          dto: this.mapOrderToDto(existingOrder),
+          isNew: false,
+          savedOrder: existingOrder,
+          notifyEmail: null as string | null,
+        };
+      }
+
+      // Resolve the owning account. Guest orders keep guestEmail; if that email
+      // matches a registered user we also link the order to that account so it
+      // shows up in their order history.
+      let resolvedUserId = userId;
+      let guestEmail: string | null = null;
+      let notifyEmail: string | null = null;
+
+      if (isGuest) {
+        guestEmail = dto.guestEmail ?? null;
+        notifyEmail = guestEmail;
+        if (guestEmail) {
+          const matched = await manager.findOne(User, { where: { email: guestEmail } });
+          if (matched) resolvedUserId = matched.id;
+        }
+      } else {
+        const account = await manager.findOne(User, { where: { id: userId } });
+        notifyEmail = account?.email ?? null;
+      }
+
+      // Snapshot the shipping address: a saved address for account checkouts,
+      // or the Stripe-collected address for guests.
+      const snapshot =
+        userId != null && dto.addressId != null
+          ? await this.resolveAddressSnapshot(manager, userId, dto.addressId)
+          : this.buildGuestSnapshot(dto.shippingAddress);
+
+      const order = manager.create(Order, {
+        userId: resolvedUserId,
+        guestEmail,
+        stripeSessionId: dto.stripeSessionId,
+        subtotal: 0,
+        shippingFee: 0,
+        taxAmount: 0,
+        total: 0,
+        status: OrderStatus.Processing,
+        items: [],
+        ...snapshot,
+      });
+
+      const orderItems: OrderItem[] = [];
+      let subtotal = 0;
+
+      if (dto.orderType === 'cart') {
+        if (isGuest) {
+          throw new BadRequestException('Guest checkout is only available for direct purchases');
+        }
+        const cart = await manager.findOne(Cart, {
+          where: { userId },
+          relations: ['items', 'items.product'],
         });
 
-        if (existingOrder) {
-          return { dto: this.mapOrderToDto(existingOrder), isNew: false, savedOrder: existingOrder };
+        if (!cart || !cart.items || cart.items.length === 0) {
+          throw new NotFoundException('Active cart is empty or not found');
         }
 
-        // Snapshot the chosen shipping address (validated to belong to the user).
-        const snapshot = await this.resolveAddressSnapshot(manager, userId, dto.addressId);
+        for (const cartItem of cart.items) {
+          // Decrement product stock atomically and verify sufficient stock.
+          const updateResult = await manager
+            .createQueryBuilder()
+            .update(Product)
+            .set({ stock: () => `stock - ${cartItem.quantity}` })
+            .where('id = :id AND stock >= :quantity', {
+              id: cartItem.productId,
+              quantity: cartItem.quantity,
+            })
+            .execute();
 
-        const order = manager.create(Order, {
-          userId,
-          stripeSessionId: dto.stripeSessionId,
-          subtotal: 0,
-          shippingFee: 0,
-          taxAmount: 0,
-          total: 0,
-          status: OrderStatus.Processing,
-          items: [],
-          ...snapshot,
-        });
-
-        const orderItems: OrderItem[] = [];
-        let subtotal = 0;
-
-        if (dto.orderType === 'cart') {
-          const cart = await manager.findOne(Cart, {
-            where: { userId },
-            relations: ['items', 'items.product'],
-          });
-
-          if (!cart || !cart.items || cart.items.length === 0) {
-            throw new NotFoundException('Active cart is empty or not found');
-          }
-
-          for (const cartItem of cart.items) {
-            // Decrement product stock atomically and verify sufficient stock.
-            const updateResult = await manager
-              .createQueryBuilder()
-              .update(Product)
-              .set({ stock: () => `stock - ${cartItem.quantity}` })
-              .where('id = :id AND stock >= :quantity', {
-                id: cartItem.productId,
-                quantity: cartItem.quantity,
-              })
-              .execute();
-
-            if (updateResult.affected === 0) {
-              throw new BadRequestException(
-                `Product "${cartItem.product.name}" has insufficient stock or is unavailable`,
-              );
-            }
-
-            const itemTotal = Number(cartItem.price) * cartItem.quantity;
-            let itemDiscount = 0;
-            if (cartItem.product.discount > 0) {
-              itemDiscount = (itemTotal * cartItem.product.discount) / 100;
-            }
-            subtotal += itemTotal - itemDiscount;
-
-            orderItems.push(
-              manager.create(OrderItem, {
-                productId: cartItem.productId,
-                productName: cartItem.product.name,
-                productImage: cartItem.product.image,
-                price: cartItem.price,
-                quantity: cartItem.quantity,
-                color: cartItem.color ?? '',
-                storage: cartItem.storage ?? '',
-              }),
+          if (updateResult.affected === 0) {
+            throw new BadRequestException(
+              `Product "${cartItem.product.name}" has insufficient stock or is unavailable`,
             );
           }
 
-          this.applyCharges(order, subtotal);
-          order.items = orderItems;
-          order.statusHistory = [this.initialHistory(manager)];
-          const persisted = await manager.save(Order, order);
+          const itemTotal = Number(cartItem.price) * cartItem.quantity;
+          let itemDiscount = 0;
+          if (cartItem.product.discount > 0) {
+            itemDiscount = (itemTotal * cartItem.product.discount) / 100;
+          }
+          subtotal += itemTotal - itemDiscount;
 
-          // Clear the cart within the same transaction.
-          await manager.remove(CartItem, cart.items);
-          cart.quantity = 0;
-          cart.items = [];
-          await manager.save(Cart, cart);
-
-          return { dto: this.mapOrderToDto(persisted), isNew: true, savedOrder: persisted };
-        }
-
-        // ---- Direct buy ------------------------------------------------------
-        if (!dto.productId) {
-          throw new NotFoundException('Product ID is required for direct purchase');
-        }
-
-        const quantity = dto.quantity || 1;
-
-        const updateResult = await manager
-          .createQueryBuilder()
-          .update(Product)
-          .set({ stock: () => `stock - ${quantity}` })
-          .where('id = :id AND stock >= :quantity', { id: dto.productId, quantity })
-          .execute();
-
-        const product = await manager.findOne(Product, { where: { id: dto.productId } });
-        if (!product) {
-          throw new NotFoundException(`Product with ID ${dto.productId} not found`);
-        }
-        if (updateResult.affected === 0) {
-          throw new BadRequestException(
-            `Product "${product.name}" has insufficient stock or is unavailable`,
+          orderItems.push(
+            manager.create(OrderItem, {
+              productId: cartItem.productId,
+              productName: cartItem.product.name,
+              productImage: cartItem.product.image,
+              price: cartItem.price,
+              quantity: cartItem.quantity,
+              color: cartItem.color ?? '',
+              storage: cartItem.storage ?? '',
+            }),
           );
         }
 
-        const itemTotal = Number(product.price) * quantity;
-        let itemDiscount = 0;
-        if (product.discount > 0) {
-          itemDiscount = (itemTotal * product.discount) / 100;
-        }
-        subtotal = itemTotal - itemDiscount;
-
-        order.items = [
-          manager.create(OrderItem, {
-            productId: product.id,
-            productName: product.name,
-            productImage: product.image,
-            price: product.price,
-            quantity,
-          }),
-        ];
         this.applyCharges(order, subtotal);
+        order.items = orderItems;
         order.statusHistory = [this.initialHistory(manager)];
         const persisted = await manager.save(Order, order);
 
-        return { dto: this.mapOrderToDto(persisted), isNew: true, savedOrder: persisted };
-      },
-    );
+        // Clear the cart within the same transaction.
+        await manager.remove(CartItem, cart.items);
+        cart.quantity = 0;
+        cart.items = [];
+        await manager.save(Cart, cart);
+
+        return {
+          dto: this.mapOrderToDto(persisted),
+          isNew: true,
+          savedOrder: persisted,
+          notifyEmail,
+        };
+      }
+
+      // ---- Direct buy ------------------------------------------------------
+      if (!dto.productId) {
+        throw new NotFoundException('Product ID is required for direct purchase');
+      }
+
+      const quantity = dto.quantity || 1;
+
+      const updateResult = await manager
+        .createQueryBuilder()
+        .update(Product)
+        .set({ stock: () => `stock - ${quantity}` })
+        .where('id = :id AND stock >= :quantity', { id: dto.productId, quantity })
+        .execute();
+
+      const product = await manager.findOne(Product, { where: { id: dto.productId } });
+      if (!product) {
+        throw new NotFoundException(`Product with ID ${dto.productId} not found`);
+      }
+      if (updateResult.affected === 0) {
+        throw new BadRequestException(
+          `Product "${product.name}" has insufficient stock or is unavailable`,
+        );
+      }
+
+      const itemTotal = Number(product.price) * quantity;
+      let itemDiscount = 0;
+      if (product.discount > 0) {
+        itemDiscount = (itemTotal * product.discount) / 100;
+      }
+      subtotal = itemTotal - itemDiscount;
+
+      order.items = [
+        manager.create(OrderItem, {
+          productId: product.id,
+          productName: product.name,
+          productImage: product.image,
+          price: product.price,
+          quantity,
+        }),
+      ];
+      this.applyCharges(order, subtotal);
+      order.statusHistory = [this.initialHistory(manager)];
+      const persisted = await manager.save(Order, order);
+
+      return {
+        dto: this.mapOrderToDto(persisted),
+        isNew: true,
+        savedOrder: persisted,
+        notifyEmail,
+      };
+    });
 
     // Best-effort confirmation email, outside the transaction.
     if (isNew) {
-      void this.sendConfirmationEmail(userId, savedOrder);
+      void this.sendConfirmationEmail(notifyEmail, savedOrder);
     }
 
     return result;
@@ -224,6 +267,23 @@ export class OrderService {
     };
   }
 
+  /** Build shipping snapshot columns from a guest's Stripe-collected address. */
+  private buildGuestSnapshot(address?: GuestShippingAddressDto): Partial<Order> {
+    if (!address) {
+      return {};
+    }
+    return {
+      shipName: address.fullName,
+      shipPhone: address.phone ?? null,
+      shipLine1: address.line1,
+      shipLine2: address.line2 ?? null,
+      shipCity: address.city,
+      shipState: address.state ?? null,
+      shipPostalCode: address.postalCode ?? null,
+      shipCountry: address.country,
+    };
+  }
+
   private applyCharges(order: Order, subtotal: number): void {
     const charges = computeOrderCharges(subtotal);
     order.subtotal = charges.subtotal;
@@ -241,11 +301,10 @@ export class OrderService {
     });
   }
 
-  private async sendConfirmationEmail(userId: number, order: Order): Promise<void> {
+  private async sendConfirmationEmail(email: string | null, order: Order): Promise<void> {
+    if (!email) return;
     try {
-      const user = await this.userRepository.findOne({ where: { id: userId } });
-      if (!user?.email) return;
-      await this.mailService.sendOrderConfirmation(user.email, this.toEmailPayload(order));
+      await this.mailService.sendOrderConfirmation(email, this.toEmailPayload(order));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error(`Order confirmation email failed for order ${order.id}: ${message}`);

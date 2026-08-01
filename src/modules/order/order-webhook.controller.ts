@@ -22,8 +22,10 @@ export class OrderWebhookController {
       productId: dto.productId,
       quantity: dto.quantity,
       addressId: dto.addressId,
+      guestEmail: dto.guestEmail,
+      shippingAddress: dto.shippingAddress,
     };
 
-    return this.orderService.createOrder(dto.userId, createOrderDto);
+    return this.orderService.createOrder(dto.userId ?? null, createOrderDto);
   }
 }

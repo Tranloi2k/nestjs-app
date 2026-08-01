@@ -58,9 +58,12 @@ export class AdminService {
     const skip = (page - 1) * limit;
 
     if (search?.trim()) {
-      queryBuilder.andWhere('(LOWER(product.name) LIKE :search OR LOWER(product.description) LIKE :search)', {
-        search: `%${search.trim().toLowerCase()}%`,
-      });
+      queryBuilder.andWhere(
+        '(LOWER(product.name) LIKE :search OR LOWER(product.description) LIKE :search)',
+        {
+          search: `%${search.trim().toLowerCase()}%`,
+        },
+      );
     }
 
     if (category?.trim()) {
@@ -172,7 +175,8 @@ export class AdminService {
     endDate?: string,
     search?: string,
   ) {
-    const queryBuilder = this.orderRepository.createQueryBuilder('order')
+    const queryBuilder = this.orderRepository
+      .createQueryBuilder('order')
       .leftJoinAndSelect('order.user', 'user')
       .leftJoinAndSelect('order.items', 'items');
 
@@ -224,16 +228,19 @@ export class AdminService {
     const formattedOrders = orders.map((order) => ({
       id: `ORD-${order.id}`,
       userId: order.userId,
+      guestEmail: order.guestEmail ?? null,
       stripeSessionId: order.stripeSessionId,
       total: Number(order.total),
       status: order.status,
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,
-      customer: order.user ? {
-        id: order.user.id,
-        username: order.user.username,
-        email: order.user.email,
-      } : null,
+      customer: order.user
+        ? {
+            id: order.user.id,
+            username: order.user.username,
+            email: order.user.email,
+          }
+        : null,
       items: (order.items || []).map((item) => ({
         id: item.id,
         productId: item.productId,
@@ -268,6 +275,7 @@ export class AdminService {
     return {
       id: `ORD-${order.id}`,
       userId: order.userId,
+      guestEmail: order.guestEmail ?? null,
       stripeSessionId: order.stripeSessionId,
       subtotal: Number(order.subtotal),
       shippingFee: Number(order.shippingFee),
@@ -290,11 +298,13 @@ export class AdminService {
         : null,
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,
-      customer: order.user ? {
-        id: order.user.id,
-        username: order.user.username,
-        email: order.user.email,
-      } : null,
+      customer: order.user
+        ? {
+            id: order.user.id,
+            username: order.user.username,
+            email: order.user.email,
+          }
+        : null,
       items: (order.items || []).map((item) => ({
         id: item.id,
         productId: item.productId,
@@ -370,10 +380,11 @@ export class AdminService {
       );
     });
 
-    // Best-effort shipping notification.
-    if (nextStatus === OrderStatus.Shipped && order.user?.email) {
+    // Best-effort shipping notification (account email, or guest email).
+    const shipRecipient = order.user?.email ?? order.guestEmail;
+    if (nextStatus === OrderStatus.Shipped && shipRecipient) {
       void this.mailService
-        .sendOrderShipped(order.user.email, this.toEmailPayload(order))
+        .sendOrderShipped(shipRecipient, this.toEmailPayload(order))
         .catch((err: unknown) => {
           const message = err instanceof Error ? err.message : String(err);
           this.logger.error(`Shipped email failed for order ${order.id}: ${message}`);
@@ -407,7 +418,8 @@ export class AdminService {
    */
 
   async getCustomers(page = 1, limit = 10, search?: string) {
-    const queryBuilder = this.userRepository.createQueryBuilder('user')
+    const queryBuilder = this.userRepository
+      .createQueryBuilder('user')
       .leftJoin('orders', 'order', 'order.userId = user.id')
       .select([
         'user.id AS id',
@@ -527,7 +539,8 @@ export class AdminService {
 
     const dateSelect = 'DATE(order.createdAt)';
 
-    const raw = await this.orderRepository.createQueryBuilder('order')
+    const raw = await this.orderRepository
+      .createQueryBuilder('order')
       .select(dateSelect, 'date')
       .addSelect('SUM(order.total)', 'revenue')
       .addSelect('COUNT(order.id)', 'orders')
@@ -571,7 +584,8 @@ export class AdminService {
   }
 
   async getOrdersSummary() {
-    const raw = await this.orderRepository.createQueryBuilder('order')
+    const raw = await this.orderRepository
+      .createQueryBuilder('order')
       .select('order.status', 'status')
       .addSelect('COUNT(order.id)', 'count')
       .groupBy('order.status')
@@ -588,7 +602,9 @@ export class AdminService {
   }
 
   async getTopProducts(limit = 5) {
-    const raw = await this.dataSource.getRepository(OrderItem).createQueryBuilder('item')
+    const raw = await this.dataSource
+      .getRepository(OrderItem)
+      .createQueryBuilder('item')
       .innerJoin('item.order', 'order')
       .select('item.productId', 'productId')
       .addSelect('item.productName', 'name')
@@ -614,8 +630,12 @@ export class AdminService {
 
   async getConversionRate() {
     const total = await this.orderRepository.count();
-    const delivered = await this.orderRepository.count({ where: { status: OrderStatus.Delivered } });
-    const cancelled = await this.orderRepository.count({ where: { status: OrderStatus.Cancelled } });
+    const delivered = await this.orderRepository.count({
+      where: { status: OrderStatus.Delivered },
+    });
+    const cancelled = await this.orderRepository.count({
+      where: { status: OrderStatus.Cancelled },
+    });
 
     const deliveredRevenue = await this.orderRepository
       .createQueryBuilder('order')

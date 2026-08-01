@@ -1,5 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  ValidateNested,
+} from 'class-validator';
+import { GuestShippingAddressDto } from './guest-shipping-address.dto';
 
 export class CreateOrderDto {
   @ApiProperty({ description: 'Stripe Checkout Session ID', example: 'cs_test_...' })
@@ -35,4 +44,15 @@ export class CreateOrderDto {
   @IsOptional()
   @IsNumber()
   addressId?: number;
+
+  @ApiProperty({ description: 'Guest email (guest orders only)', required: false })
+  @IsOptional()
+  @IsEmail()
+  guestEmail?: string;
+
+  @ApiProperty({ description: 'Shipping address snapshot for guest orders', required: false })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => GuestShippingAddressDto)
+  shippingAddress?: GuestShippingAddressDto;
 }

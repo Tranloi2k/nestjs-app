@@ -22,8 +22,14 @@ export class Order {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
-  userId: number;
+  // Null for guest (not-signed-in) orders. Guests are identified by guestEmail.
+  @Column({ type: 'int', nullable: true })
+  userId: number | null;
+
+  // Email captured at guest checkout (Stripe customer_details). Null for
+  // account orders, where the email lives on the linked User.
+  @Column({ type: 'varchar', nullable: true })
+  guestEmail: string | null;
 
   @Column({ unique: true })
   stripeSessionId: string;
@@ -101,8 +107,8 @@ export class Order {
   @UpdateDateColumn()
   updatedAt: Date;
 
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
-  user: User;
+  @ManyToOne(() => User, { onDelete: 'CASCADE', nullable: true })
+  user: User | null;
 
   @OneToMany(OrderItemEntity, (orderItem: OrderItem) => orderItem.order, { cascade: true })
   items: OrderItem[];

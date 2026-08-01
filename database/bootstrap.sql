@@ -151,7 +151,8 @@ CREATE INDEX idx_addresses_user_id ON addresses ("userId");
 -- -----------------------------------------------------------------------------
 CREATE TABLE orders (
   id               SERIAL PRIMARY KEY,
-  "userId"         INTEGER NOT NULL,
+  "userId"         INTEGER,
+  "guestEmail"     VARCHAR,
   "stripeSessionId" VARCHAR NOT NULL UNIQUE,
   subtotal         NUMERIC(10,2) NOT NULL DEFAULT 0,
   "shippingFee"    NUMERIC(10,2) NOT NULL DEFAULT 0,
@@ -176,6 +177,7 @@ CREATE TABLE orders (
 );
 
 CREATE INDEX idx_orders_user_id ON orders ("userId");
+CREATE INDEX idx_orders_guest_email ON orders ("guestEmail");
 
 -- -----------------------------------------------------------------------------
 -- order_status_history (audit trail of order status transitions)
